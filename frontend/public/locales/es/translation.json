@@ -1,0 +1,84 @@
+{
+  "app": {
+    "title": "Planificador de Linea de Produccion",
+    "nav": {
+      "dashboard": "Inicio",
+      "workers": "Trabajadores",
+      "skills": "Habilidades",
+      "shifts": "Turnos",
+      "lines": "Lineas de Produccion",
+      "optimize": "Optimizar"
+    }
+  },
+  "common": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "edit": "Editar",
+    "add": "Agregar",
+    "name": "Nombre",
+    "description": "Descripcion",
+    "active": "Activo",
+    "actions": "Acciones",
+    "confirm_delete": "Estas seguro de que quieres eliminar este elemento?",
+    "loading": "Cargando...",
+    "no_data": "No hay datos disponibles",
+    "error": "Ocurrio un error"
+  },
+  "skills": {
+    "title": "Gestion de Habilidades",
+    "add": "Agregar Habilidad",
+    "name_placeholder": "Nombre de la habilidad",
+    "desc_placeholder": "Descripcion de la habilidad"
+  },
+  "workers": {
+    "title": "Gestion de Trabajadores",
+    "add": "Agregar Trabajador",
+    "name_placeholder": "Nombre del trabajador",
+    "skills": "Habilidades",
+    "select_skills": "Seleccionar habilidades",
+    "no_skills": "Sin habilidades asignadas"
+  },
+  "shifts": {
+    "title": "Gestion de Turnos",
+    "add": "Agregar Turno",
+    "name_placeholder": "Nombre del turno",
+    "start_hour": "Hora de Inicio",
+    "end_hour": "Hora de Fin",
+    "assignments": "Asignaciones de Trabajadores",
+    "assign_worker": "Asignar Trabajador",
+    "select_worker": "Seleccionar trabajador",
+    "select_shift": "Seleccionar turno"
+  },
+  "lines": {
+    "title": "Lineas de Produccion",
+    "add": "Agregar Linea de Produccion",
+    "name_placeholder": "Nombre de la linea",
+    "desc_placeholder": "Descripcion de la linea",
+    "stations": "Estaciones",
+    "add_station": "Agregar Estacion",
+    "station_name": "Nombre de Estacion",
+    "position": "Posicion",
+    "workers_needed": "Trabajadores Necesarios",
+    "max_minutes": "Minutos Maximos por Trabajador",
+    "cycle_time": "Tiempo de Ciclo (min)",
+    "required_skills": "Habilidades Requeridas"
+  },
+  "optimize": {
+    "title": "Optimizador de Horarios",
+    "select_line": "Seleccionar Linea de Produccion",
+    "select_shift": "Seleccionar Turno",
+    "slot_duration": "Duracion del Intervalo (minutos)",
+    "run": "Generar Horario",
+    "status": "Estado",
+    "optimal": "Solucion optima encontrada",
+    "feasible": "Solucion factible encontrada (puede no ser optima)",
+    "infeasible": "No se encontro solucion factible",
+    "schedule": "Horario Generado",
+    "time_slot": "Intervalo de Tiempo",
+    "station": "Estacion",
+    "assigned_workers": "Trabajadores Asignados",
+    "no_schedule": "No se ha generado horario aun. Configure su linea y ejecute el optimizador.",
+    "minutes": "min"
+  }
+}

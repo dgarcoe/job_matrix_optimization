@@ -1,0 +1,84 @@
+{
+  "app": {
+    "title": "Production Line Scheduler",
+    "nav": {
+      "dashboard": "Dashboard",
+      "workers": "Workers",
+      "skills": "Skills",
+      "shifts": "Shifts",
+      "lines": "Production Lines",
+      "optimize": "Optimize"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "name": "Name",
+    "description": "Description",
+    "active": "Active",
+    "actions": "Actions",
+    "confirm_delete": "Are you sure you want to delete this item?",
+    "loading": "Loading...",
+    "no_data": "No data available",
+    "error": "An error occurred"
+  },
+  "skills": {
+    "title": "Skills Management",
+    "add": "Add Skill",
+    "name_placeholder": "Skill name",
+    "desc_placeholder": "Skill description"
+  },
+  "workers": {
+    "title": "Workers Management",
+    "add": "Add Worker",
+    "name_placeholder": "Worker name",
+    "skills": "Skills",
+    "select_skills": "Select skills",
+    "no_skills": "No skills assigned"
+  },
+  "shifts": {
+    "title": "Shifts Management",
+    "add": "Add Shift",
+    "name_placeholder": "Shift name",
+    "start_hour": "Start Hour",
+    "end_hour": "End Hour",
+    "assignments": "Worker Assignments",
+    "assign_worker": "Assign Worker",
+    "select_worker": "Select worker",
+    "select_shift": "Select shift"
+  },
+  "lines": {
+    "title": "Production Lines",
+    "add": "Add Production Line",
+    "name_placeholder": "Line name",
+    "desc_placeholder": "Line description",
+    "stations": "Stations",
+    "add_station": "Add Station",
+    "station_name": "Station Name",
+    "position": "Position",
+    "workers_needed": "Workers Needed",
+    "max_minutes": "Max Minutes per Worker",
+    "cycle_time": "Cycle Time (min)",
+    "required_skills": "Required Skills"
+  },
+  "optimize": {
+    "title": "Schedule Optimizer",
+    "select_line": "Select Production Line",
+    "select_shift": "Select Shift",
+    "slot_duration": "Slot Duration (minutes)",
+    "run": "Generate Schedule",
+    "status": "Status",
+    "optimal": "Optimal solution found",
+    "feasible": "Feasible solution found (may not be optimal)",
+    "infeasible": "No feasible solution found",
+    "schedule": "Generated Schedule",
+    "time_slot": "Time Slot",
+    "station": "Station",
+    "assigned_workers": "Assigned Workers",
+    "no_schedule": "No schedule generated yet. Configure your line and run the optimizer.",
+    "minutes": "min"
+  }
+}
