@@ -7,6 +7,7 @@ const navItems = [
   { path: "/workers", key: "workers" },
   { path: "/shifts", key: "shifts" },
   { path: "/lines", key: "lines" },
+  { path: "/flow-editor", key: "flow_editor" },
   { path: "/optimize", key: "optimize" },
 ];
 

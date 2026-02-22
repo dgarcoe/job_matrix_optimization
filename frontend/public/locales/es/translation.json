@@ -7,6 +7,7 @@
       "skills": "Habilidades",
       "shifts": "Turnos",
       "lines": "Lineas de Produccion",
+      "flow_editor": "Editor de Flujo",
       "optimize": "Optimizar"
     }
   },
@@ -63,6 +64,13 @@
     "max_minutes": "Minutos Maximos por Trabajador",
     "cycle_time": "Tiempo de Ciclo (min)",
     "required_skills": "Habilidades Requeridas"
+  },
+  "flow": {
+    "title": "Editor de Flujo de Proceso",
+    "add_station": "Agregar Estacion",
+    "edit_station": "Editar Estacion",
+    "select_line_hint": "Seleccione una linea de produccion para disenar su flujo de proceso.",
+    "connect_hint": "Arrastre desde el conector derecho de una estacion al conector izquierdo de otra para crear una conexion."
   },
   "optimize": {
     "title": "Optimizador de Horarios",

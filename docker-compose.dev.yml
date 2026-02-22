@@ -1,0 +1,13 @@
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace:cached
+    ports:
+      - "8000:8000"
+      - "5173:5173"
+    environment:
+      - DATABASE_URL=sqlite:///./data/production_scheduler.db
+    command: sleep infinity

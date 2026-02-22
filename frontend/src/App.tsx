@@ -9,6 +9,7 @@ import Workers from "./pages/Workers";
 import Shifts from "./pages/Shifts";
 import ProductionLines from "./pages/ProductionLines";
 import Optimize from "./pages/Optimize";
+import FlowEditor from "./pages/FlowEditor";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ export default function App() {
               <Route path="/workers" element={<Workers />} />
               <Route path="/shifts" element={<Shifts />} />
               <Route path="/lines" element={<ProductionLines />} />
+              <Route path="/flow-editor" element={<FlowEditor />} />
               <Route path="/optimize" element={<Optimize />} />
             </Route>
           </Routes>

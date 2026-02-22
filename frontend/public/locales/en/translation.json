@@ -7,6 +7,7 @@
       "skills": "Skills",
       "shifts": "Shifts",
       "lines": "Production Lines",
+      "flow_editor": "Flow Editor",
       "optimize": "Optimize"
     }
   },
@@ -63,6 +64,13 @@
     "max_minutes": "Max Minutes per Worker",
     "cycle_time": "Cycle Time (min)",
     "required_skills": "Required Skills"
+  },
+  "flow": {
+    "title": "Process Flow Editor",
+    "add_station": "Add Station",
+    "edit_station": "Edit Station",
+    "select_line_hint": "Select a production line to design its process flow.",
+    "connect_hint": "Drag from a station's right handle to another station's left handle to create a connection."
   },
   "optimize": {
     "title": "Schedule Optimizer",

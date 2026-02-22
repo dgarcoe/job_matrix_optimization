@@ -83,6 +83,8 @@ class StationBase(BaseModel):
     max_minutes_per_worker: int = 120
     cycle_time_minutes: float = 1.0
     active: bool = True
+    layout_x: float = 0.0
+    layout_y: float = 0.0
 
 
 class StationCreate(StationBase):
@@ -97,11 +99,30 @@ class StationUpdate(BaseModel):
     cycle_time_minutes: float | None = None
     active: bool | None = None
     required_skill_ids: list[int] | None = None
+    layout_x: float | None = None
+    layout_y: float | None = None
 
 
 class StationOut(StationBase):
     id: int
     required_skills: list[SkillOut] = []
+
+    model_config = {"from_attributes": True}
+
+
+# --- Station Connections ---
+class StationConnectionCreate(BaseModel):
+    source_station_id: int
+    target_station_id: int
+    label: str = ""
+
+
+class StationConnectionOut(BaseModel):
+    id: int
+    production_line_id: int
+    source_station_id: int
+    target_station_id: int
+    label: str = ""
 
     model_config = {"from_attributes": True}
 
@@ -120,6 +141,7 @@ class ProductionLineCreate(ProductionLineBase):
 class ProductionLineOut(ProductionLineBase):
     id: int
     stations: list[StationOut] = []
+    connections: list[StationConnectionOut] = []
 
     model_config = {"from_attributes": True}
 

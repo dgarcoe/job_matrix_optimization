@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
+    "@xyflow/react": "^12.10.1",
     "axios": "^1.13.5",
     "i18next": "^25.8.13",
     "i18next-browser-languagedetector": "^8.2.1",

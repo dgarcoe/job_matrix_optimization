@@ -37,6 +37,16 @@ export interface Station {
   cycle_time_minutes: number;
   active: boolean;
   required_skills: Skill[];
+  layout_x: number;
+  layout_y: number;
+}
+
+export interface StationConnection {
+  id: number;
+  production_line_id: number;
+  source_station_id: number;
+  target_station_id: number;
+  label: string;
 }
 
 export interface ProductionLine {
@@ -45,6 +55,7 @@ export interface ProductionLine {
   description: string;
   active: boolean;
   stations: Station[];
+  connections: StationConnection[];
 }
 
 export interface StationAssignment {

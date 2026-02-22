@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Table,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -83,7 +84,14 @@ class ProductionLine(Base):
     description = Column(String, default="")
     active = Column(Boolean, default=True)
 
-    stations = relationship("Station", back_populates="production_line")
+    stations = relationship(
+        "Station", back_populates="production_line", cascade="all, delete-orphan"
+    )
+    connections = relationship(
+        "StationConnection",
+        back_populates="production_line",
+        cascade="all, delete-orphan",
+    )
 
 
 class Station(Base):
@@ -102,9 +110,43 @@ class Station(Base):
     cycle_time_minutes = Column(Float, default=1.0)  # Time per unit/cycle
     active = Column(Boolean, default=True)
 
+    # Layout position for visual flow editor (canvas coordinates)
+    layout_x = Column(Float, default=0.0)
+    layout_y = Column(Float, default=0.0)
+
     production_line = relationship("ProductionLine", back_populates="stations")
     required_skills = relationship(
         "Skill",
         secondary=station_required_skills,
         back_populates="stations",
+    )
+
+
+class StationConnection(Base):
+    """Directed edge between two stations representing process flow."""
+
+    __tablename__ = "station_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    production_line_id = Column(
+        Integer, ForeignKey("production_lines.id"), nullable=False
+    )
+    source_station_id = Column(Integer, ForeignKey("stations.id"), nullable=False)
+    target_station_id = Column(Integer, ForeignKey("stations.id"), nullable=False)
+    label = Column(String, default="")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "source_station_id",
+            "target_station_id",
+            name="uq_station_connection",
+        ),
+    )
+
+    production_line = relationship("ProductionLine", back_populates="connections")
+    source_station = relationship(
+        "Station", foreign_keys=[source_station_id]
+    )
+    target_station = relationship(
+        "Station", foreign_keys=[target_station_id]
     )
