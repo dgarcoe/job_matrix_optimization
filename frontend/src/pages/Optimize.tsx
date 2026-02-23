@@ -133,6 +133,22 @@ export default function Optimize() {
             {result.message && <span> - {result.message}</span>}
           </div>
 
+          {result.diagnostics && result.diagnostics.length > 0 && (
+            <div className="diagnostics-panel">
+              <h3>{t("optimize.diagnostics_title")}</h3>
+              <ul className="diagnostics-list">
+                {result.diagnostics.map((d, i) => (
+                  <li key={i} className={`diagnostic-item diagnostic-${d.level}`}>
+                    <span className="diagnostic-icon">
+                      {d.level === "error" ? "\u2718" : "\u26A0"}
+                    </span>
+                    <span>{d.message}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {result.schedule.length > 0 && (
             <>
               <h3>{t("optimize.schedule")}</h3>

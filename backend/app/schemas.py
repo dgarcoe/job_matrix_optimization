@@ -167,6 +167,12 @@ class TimeSlot(BaseModel):
     assignments: list[StationAssignment]
 
 
+class DiagnosticItem(BaseModel):
+    level: str  # "error", "warning"
+    station_name: str = ""
+    message: str
+
+
 class OptimizationResult(BaseModel):
     production_line_id: int
     shift_id: int
@@ -174,5 +180,6 @@ class OptimizationResult(BaseModel):
     total_slots: int
     schedule: list[TimeSlot]
     unassigned_slots: list[dict] = []
+    diagnostics: list[DiagnosticItem] = []
     status: str  # "optimal", "feasible", "infeasible"
     message: str = ""

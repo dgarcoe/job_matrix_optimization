@@ -87,6 +87,7 @@
     "station": "Estacion",
     "assigned_workers": "Trabajadores Asignados",
     "no_schedule": "No se ha generado horario aun. Configure su linea y ejecute el optimizador.",
+    "diagnostics_title": "Diagnostico - Por que fallo el horario",
     "minutes": "min"
   }
 }

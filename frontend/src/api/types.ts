@@ -72,12 +72,19 @@ export interface TimeSlot {
   assignments: StationAssignment[];
 }
 
+export interface DiagnosticItem {
+  level: string;
+  station_name: string;
+  message: string;
+}
+
 export interface OptimizationResult {
   production_line_id: number;
   shift_id: number;
   slot_duration_minutes: number;
   total_slots: number;
   schedule: TimeSlot[];
+  diagnostics: DiagnosticItem[];
   status: string;
   message: string;
 }

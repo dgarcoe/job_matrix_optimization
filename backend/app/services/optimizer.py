@@ -9,14 +9,89 @@ assigns workers to stations across time slots such that:
   - Workers are rotated across stations to distribute workload.
 """
 
+import math
+
 from ortools.sat.python import cp_model
 
 from app.schemas import (
+    DiagnosticItem,
     OptimizationRequest,
     OptimizationResult,
     StationAssignment,
     TimeSlot,
 )
+
+
+def _run_diagnostics(
+    workers: list[dict],
+    stations: list[dict],
+    slot_duration: int,
+    num_slots: int,
+) -> list[DiagnosticItem]:
+    """Check for common causes of infeasibility and return diagnostic items."""
+    diagnostics: list[DiagnosticItem] = []
+    num_workers = len(workers)
+
+    # Total simultaneous workers required across all stations
+    total_needed = sum(s["workers_needed"] for s in stations)
+    if num_workers < total_needed:
+        diagnostics.append(
+            DiagnosticItem(
+                level="error",
+                message=(
+                    f"Not enough workers: {num_workers} available but "
+                    f"{total_needed} needed simultaneously across all stations."
+                ),
+            )
+        )
+
+    # Per-station checks
+    for s in stations:
+        required_skills = set(s["required_skill_ids"])
+        eligible_count = 0
+        for w in workers:
+            w_skills = set(w["skill_ids"])
+            if not required_skills or required_skills.issubset(w_skills):
+                eligible_count += 1
+
+        needed = s["workers_needed"]
+
+        # Check: enough eligible workers to fill the station at all?
+        if eligible_count < needed:
+            skill_names = ", ".join(str(sid) for sid in s["required_skill_ids"])
+            diagnostics.append(
+                DiagnosticItem(
+                    level="error",
+                    station_name=s["name"],
+                    message=(
+                        f"Station '{s['name']}' needs {needed} worker(s) "
+                        f"but only {eligible_count} worker(s) have the "
+                        f"required skill(s) (IDs: {skill_names or 'none'})."
+                    ),
+                )
+            )
+        else:
+            # Check: enough eligible workers for rotation given max_minutes?
+            max_slots = s["max_minutes_per_worker"] // slot_duration
+            if max_slots > 0 and max_slots < num_slots:
+                rotations_needed = math.ceil(num_slots / max_slots)
+                min_unique = rotations_needed * needed
+                if eligible_count < min_unique:
+                    diagnostics.append(
+                        DiagnosticItem(
+                            level="error",
+                            station_name=s["name"],
+                            message=(
+                                f"Station '{s['name']}' needs {needed} worker(s) "
+                                f"per slot, max {s['max_minutes_per_worker']} min "
+                                f"per worker ({max_slots} slots). Over {num_slots} "
+                                f"slots this requires at least {min_unique} eligible "
+                                f"worker(s), but only {eligible_count} qualify."
+                            ),
+                        )
+                    )
+
+    return diagnostics
 
 
 def optimize_schedule(
@@ -152,12 +227,14 @@ def optimize_schedule(
     status = solver.solve(model)
 
     if status == cp_model.INFEASIBLE:
+        diagnostics = _run_diagnostics(workers, stations, slot_duration, num_slots)
         return OptimizationResult(
             production_line_id=request.production_line_id,
             shift_id=request.shift_id,
             slot_duration_minutes=slot_duration,
             total_slots=num_slots,
             schedule=[],
+            diagnostics=diagnostics,
             status="infeasible",
             message=(
                 "No feasible schedule found. Check that you have enough "
