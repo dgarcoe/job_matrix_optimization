@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.models import Skill, Worker
-from app.schemas import WorkerCreate, WorkerOut, WorkerUpdate
+from app.schemas import WorkerBatchCreate, WorkerCreate, WorkerOut, WorkerUpdate
 
 router = APIRouter(prefix="/api/workers", tags=["workers"])
 
@@ -26,6 +26,26 @@ def create_worker(data: WorkerCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(worker)
     return worker
+
+
+@router.post("/batch", response_model=list[WorkerOut], status_code=201)
+def create_workers_batch(data: WorkerBatchCreate, db: Session = Depends(get_db)):
+    skills = []
+    if data.skill_ids:
+        skills = db.query(Skill).filter(Skill.id.in_(data.skill_ids)).all()
+    created = []
+    for name in data.names:
+        name = name.strip()
+        if not name:
+            continue
+        worker = Worker(name=name, active=True)
+        worker.skills = list(skills)
+        db.add(worker)
+        created.append(worker)
+    db.commit()
+    for w in created:
+        db.refresh(w)
+    return created
 
 
 @router.get("/{worker_id}", response_model=WorkerOut)

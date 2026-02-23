@@ -8,6 +8,8 @@ export default function Workers() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
+  const [batchNames, setBatchNames] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<number[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
 
@@ -24,6 +26,15 @@ export default function Workers() {
   const createMutation = useMutation({
     mutationFn: (data: { name: string; skill_ids: number[] }) =>
       api.post("/api/workers", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workers"] });
+      resetForm();
+    },
+  });
+
+  const batchCreateMutation = useMutation({
+    mutationFn: (data: { names: string[]; skill_ids: number[] }) =>
+      api.post("/api/workers/batch", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["workers"] });
       resetForm();
@@ -51,22 +62,31 @@ export default function Workers() {
 
   const resetForm = () => {
     setName("");
+    setBatchNames("");
     setSelectedSkills([]);
     setEditingId(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-    const data = { name, skill_ids: selectedSkills };
     if (editingId !== null) {
-      updateMutation.mutate({ id: editingId, data });
+      if (!name.trim()) return;
+      updateMutation.mutate({ id: editingId, data: { name, skill_ids: selectedSkills } });
+    } else if (batchMode) {
+      const names = batchNames
+        .split("\n")
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0);
+      if (names.length === 0) return;
+      batchCreateMutation.mutate({ names, skill_ids: selectedSkills });
     } else {
-      createMutation.mutate(data);
+      if (!name.trim()) return;
+      createMutation.mutate({ name, skill_ids: selectedSkills });
     }
   };
 
   const startEdit = (worker: Worker) => {
+    setBatchMode(false);
     setEditingId(worker.id);
     setName(worker.name);
     setSelectedSkills(worker.skills.map((s) => s.id));
@@ -86,17 +106,50 @@ export default function Workers() {
     <div>
       <h2>{t("workers.title")}</h2>
 
+      {editingId === null && (
+        <div className="form-row" style={{ marginBottom: "0.5rem" }}>
+          <button
+            type="button"
+            className={!batchMode ? "chip chip-active" : "chip"}
+            onClick={() => { setBatchMode(false); resetForm(); }}
+          >
+            {t("workers.add")}
+          </button>
+          <button
+            type="button"
+            className={batchMode ? "chip chip-active" : "chip"}
+            onClick={() => { setBatchMode(true); resetForm(); }}
+          >
+            {t("workers.add_batch")}
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="form-column">
         <div className="form-row">
-          <input
-            type="text"
-            placeholder={t("workers.name_placeholder")}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <button type="submit">
-            {editingId !== null ? t("common.save") : t("workers.add")}
+          {batchMode && editingId === null ? (
+            <textarea
+              placeholder={t("workers.batch_placeholder")}
+              value={batchNames}
+              onChange={(e) => setBatchNames(e.target.value)}
+              rows={4}
+              required
+              style={{ flex: 1 }}
+            />
+          ) : (
+            <input
+              type="text"
+              placeholder={t("workers.name_placeholder")}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          )}
+          <button
+            type="submit"
+            disabled={batchCreateMutation.isPending || createMutation.isPending}
+          >
+            {editingId !== null ? t("common.save") : batchMode ? t("workers.add_batch") : t("workers.add")}
           </button>
           {editingId !== null && (
             <button type="button" onClick={resetForm}>

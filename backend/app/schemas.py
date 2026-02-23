@@ -27,6 +27,11 @@ class WorkerCreate(WorkerBase):
     skill_ids: list[int] = []
 
 
+class WorkerBatchCreate(BaseModel):
+    names: list[str]
+    skill_ids: list[int] = []
+
+
 class WorkerUpdate(BaseModel):
     name: str | None = None
     active: bool | None = None

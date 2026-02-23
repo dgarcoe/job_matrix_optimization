@@ -35,7 +35,9 @@
   "workers": {
     "title": "Gestion de Trabajadores",
     "add": "Agregar Trabajador",
+    "add_batch": "Agregar Varios",
     "name_placeholder": "Nombre del trabajador",
+    "batch_placeholder": "Ingrese un nombre de trabajador por linea",
     "skills": "Habilidades",
     "select_skills": "Seleccionar habilidades",
     "no_skills": "Sin habilidades asignadas"

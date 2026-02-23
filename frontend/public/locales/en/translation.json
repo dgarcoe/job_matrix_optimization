@@ -35,7 +35,9 @@
   "workers": {
     "title": "Workers Management",
     "add": "Add Worker",
+    "add_batch": "Add Multiple",
     "name_placeholder": "Worker name",
+    "batch_placeholder": "Enter one worker name per line",
     "skills": "Skills",
     "select_skills": "Select skills",
     "no_skills": "No skills assigned"
