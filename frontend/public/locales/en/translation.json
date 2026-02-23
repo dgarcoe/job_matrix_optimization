@@ -97,6 +97,7 @@
     "assigned_workers": "Assigned Workers",
     "no_schedule": "No schedule generated yet. Configure your line and run the optimizer.",
     "diagnostics_title": "Diagnostics - Why the schedule failed",
+    "gantt_title": "Worker Timeline",
     "minutes": "min"
   }
 }

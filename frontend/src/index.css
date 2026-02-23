@@ -781,6 +781,137 @@ td button {
   stroke-width: 2;
 }
 
+/* Gantt Chart */
+.gantt-container {
+  margin-top: 1.5rem;
+}
+
+.gantt-legend {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.gantt-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text);
+}
+
+.gantt-legend-color {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.gantt-chart {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.gantt-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  min-height: 32px;
+}
+
+.gantt-row:last-child {
+  border-bottom: none;
+}
+
+.gantt-label {
+  width: 120px;
+  min-width: 120px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-right: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.gantt-bars {
+  flex: 1;
+  position: relative;
+  height: 28px;
+  min-width: 400px;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 3px;
+  height: 22px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: default;
+  transition: opacity 0.15s;
+}
+
+.gantt-bar:hover {
+  opacity: 0.85;
+}
+
+.gantt-bar-text {
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.gantt-time-axis {
+  min-height: 24px;
+  background: #f1f5f9;
+}
+
+.gantt-time-axis .gantt-label {
+  background: #f1f5f9;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.gantt-time-axis .gantt-bars {
+  height: 24px;
+}
+
+.gantt-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: "Courier New", monospace;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.gantt-tick:first-child {
+  transform: translateX(0);
+}
+
+.gantt-tick:last-child {
+  transform: translateX(-100%);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .app-body {

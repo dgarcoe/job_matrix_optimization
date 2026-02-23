@@ -7,6 +7,7 @@ import type {
   Shift,
   OptimizationResult,
 } from "../api/types";
+import GanttChart from "../components/GanttChart";
 
 function formatMinutes(m: number): string {
   const h = Math.floor(m / 60);
@@ -181,6 +182,8 @@ export default function Optimize() {
                   </tbody>
                 </table>
               </div>
+
+              <GanttChart schedule={result.schedule} slotDuration={slotDuration} />
             </>
           )}
         </div>
