@@ -49,7 +49,14 @@
     "assignments": "Worker Assignments",
     "assign_worker": "Assign Worker",
     "select_worker": "Select worker",
-    "select_shift": "Select shift"
+    "select_shift": "Select shift",
+    "manage_workers": "Manage Workers",
+    "workers_assigned": "workers assigned",
+    "select_all": "Select All",
+    "select_none": "Select None",
+    "selected": "selected",
+    "apply": "Apply",
+    "saved": "Saved!"
   },
   "lines": {
     "title": "Production Lines",

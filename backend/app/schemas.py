@@ -74,6 +74,10 @@ class ShiftAssignmentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ShiftAssignmentBatch(BaseModel):
+    worker_ids: list[int]
+
+
 # --- Stations ---
 class StationBase(BaseModel):
     name: str

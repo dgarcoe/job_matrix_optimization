@@ -10,6 +10,109 @@ function formatHour(h: number): string {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
+function WorkerChecklist({
+  shift,
+  workers,
+  assignments,
+}: {
+  shift: Shift;
+  workers: Worker[];
+  assignments: ShiftAssignment[];
+}) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+
+  const assignedIds = new Set(
+    assignments.filter((a) => a.shift_id === shift.id).map((a) => a.worker_id)
+  );
+  const [selected, setSelected] = useState<Set<number>>(new Set(assignedIds));
+  const [saved, setSaved] = useState(false);
+
+  const batchMutation = useMutation({
+    mutationFn: (workerIds: number[]) =>
+      api.put(`/api/shifts/${shift.id}/assignments/batch`, {
+        worker_ids: workerIds,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["shift-assignments"] });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    },
+  });
+
+  const toggle = (workerId: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(workerId)) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+    setSaved(false);
+  };
+
+  const selectAll = () => {
+    setSelected(new Set(workers.map((w) => w.id)));
+    setSaved(false);
+  };
+
+  const selectNone = () => {
+    setSelected(new Set());
+    setSaved(false);
+  };
+
+  const hasChanges =
+    selected.size !== assignedIds.size ||
+    [...selected].some((id) => !assignedIds.has(id));
+
+  return (
+    <div className="worker-checklist">
+      <div className="checklist-toolbar">
+        <button type="button" className="btn-sm" onClick={selectAll}>
+          {t("shifts.select_all")}
+        </button>
+        <button type="button" className="btn-sm" onClick={selectNone}>
+          {t("shifts.select_none")}
+        </button>
+        <span className="checklist-count">
+          {selected.size} / {workers.length} {t("shifts.selected")}
+        </span>
+      </div>
+
+      <div className="checklist-grid">
+        {workers.map((w) => (
+          <label key={w.id} className={`checklist-item ${selected.has(w.id) ? "checklist-item-checked" : ""}`}>
+            <input
+              type="checkbox"
+              checked={selected.has(w.id)}
+              onChange={() => toggle(w.id)}
+            />
+            <span className="checklist-name">{w.name}</span>
+            {w.skills.length > 0 && (
+              <span className="checklist-skills">
+                {w.skills.map((s) => s.name).join(", ")}
+              </span>
+            )}
+          </label>
+        ))}
+      </div>
+
+      <div className="checklist-actions">
+        <button
+          type="button"
+          disabled={!hasChanges || batchMutation.isPending}
+          onClick={() => batchMutation.mutate([...selected])}
+        >
+          {batchMutation.isPending ? t("common.loading") : t("shifts.apply")}
+        </button>
+        {saved && <span className="checklist-saved">{t("shifts.saved")}</span>}
+        {batchMutation.isError && (
+          <span className="checklist-error">{t("common.error")}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Shifts() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -19,10 +122,7 @@ export default function Shifts() {
   const [startHour, setStartHour] = useState(6);
   const [endHour, setEndHour] = useState(14);
   const [editingId, setEditingId] = useState<number | null>(null);
-
-  // Assignment form
-  const [assignWorkerId, setAssignWorkerId] = useState<number | "">("");
-  const [assignShiftId, setAssignShiftId] = useState<number | "">("");
+  const [expandedShiftId, setExpandedShiftId] = useState<number | null>(null);
 
   const { data: shifts, isLoading } = useQuery<Shift[]>({
     queryKey: ["shifts"],
@@ -70,23 +170,6 @@ export default function Shifts() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shifts"] }),
   });
 
-  const createAssignment = useMutation({
-    mutationFn: (data: { worker_id: number; shift_id: number }) =>
-      api.post("/api/shifts/assignments", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["shift-assignments"] });
-      setAssignWorkerId("");
-      setAssignShiftId("");
-    },
-  });
-
-  const deleteAssignment = useMutation({
-    mutationFn: (id: number) =>
-      api.delete(`/api/shifts/assignments/${id}`),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["shift-assignments"] }),
-  });
-
   const resetForm = () => {
     setName("");
     setStartHour(6);
@@ -110,15 +193,6 @@ export default function Shifts() {
     setName(shift.name);
     setStartHour(shift.start_hour);
     setEndHour(shift.end_hour);
-  };
-
-  const handleAssign = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (assignWorkerId === "" || assignShiftId === "") return;
-    createAssignment.mutate({
-      worker_id: assignWorkerId as number,
-      shift_id: assignShiftId as number,
-    });
   };
 
   if (isLoading) return <p>{t("common.loading")}</p>;
@@ -168,103 +242,65 @@ export default function Shifts() {
       </form>
 
       {shifts && shifts.length > 0 ? (
-        <table>
-          <thead>
-            <tr>
-              <th>{t("common.name")}</th>
-              <th>{t("shifts.start_hour")}</th>
-              <th>{t("shifts.end_hour")}</th>
-              <th>{t("common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shifts.map((shift) => (
-              <tr key={shift.id}>
-                <td>{shift.name}</td>
-                <td>{formatHour(shift.start_hour)}</td>
-                <td>{formatHour(shift.end_hour)}</td>
-                <td>
-                  <button onClick={() => startEdit(shift)}>
-                    {t("common.edit")}
-                  </button>
-                  <button
-                    className="btn-danger"
-                    onClick={() => {
-                      if (confirm(t("common.confirm_delete"))) {
-                        deleteShift.mutate(shift.id);
+        <div className="lines-list">
+          {shifts.map((shift) => {
+            const shiftAssignmentCount = assignments
+              ? assignments.filter((a) => a.shift_id === shift.id).length
+              : 0;
+            const isExpanded = expandedShiftId === shift.id;
+            return (
+              <div key={shift.id} className="line-card">
+                <div className="line-header">
+                  <div>
+                    <strong>{shift.name}</strong>
+                    <span className="line-desc">
+                      {" "}
+                      {formatHour(shift.start_hour)} –{" "}
+                      {formatHour(shift.end_hour)}
+                    </span>
+                    <span className="badge">
+                      {shiftAssignmentCount} {t("shifts.workers_assigned")}
+                    </span>
+                  </div>
+                  <div>
+                    <button
+                      onClick={() =>
+                        setExpandedShiftId(isExpanded ? null : shift.id)
                       }
-                    }}
-                  >
-                    {t("common.delete")}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p>{t("common.no_data")}</p>
-      )}
+                    >
+                      {isExpanded
+                        ? t("common.cancel")
+                        : t("shifts.manage_workers")}
+                    </button>
+                    <button onClick={() => startEdit(shift)}>
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      className="btn-danger"
+                      onClick={() => {
+                        if (confirm(t("common.confirm_delete"))) {
+                          deleteShift.mutate(shift.id);
+                        }
+                      }}
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </div>
 
-      <h3>{t("shifts.assignments")}</h3>
-      <form onSubmit={handleAssign} className="form-row">
-        <select
-          value={assignWorkerId}
-          onChange={(e) =>
-            setAssignWorkerId(e.target.value ? Number(e.target.value) : "")
-          }
-          required
-        >
-          <option value="">{t("shifts.select_worker")}</option>
-          {workers?.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={assignShiftId}
-          onChange={(e) =>
-            setAssignShiftId(e.target.value ? Number(e.target.value) : "")
-          }
-          required
-        >
-          <option value="">{t("shifts.select_shift")}</option>
-          {shifts?.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <button type="submit">{t("shifts.assign_worker")}</button>
-      </form>
-
-      {assignments && assignments.length > 0 ? (
-        <table>
-          <thead>
-            <tr>
-              <th>{t("app.nav.workers")}</th>
-              <th>{t("app.nav.shifts")}</th>
-              <th>{t("common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {assignments.map((a) => (
-              <tr key={a.id}>
-                <td>{a.worker.name}</td>
-                <td>{a.shift.name}</td>
-                <td>
-                  <button
-                    className="btn-danger"
-                    onClick={() => deleteAssignment.mutate(a.id)}
-                  >
-                    {t("common.delete")}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                {isExpanded && workers && assignments && (
+                  <div className="stations-section">
+                    <WorkerChecklist
+                      shift={shift}
+                      workers={workers.filter((w) => w.active)}
+                      assignments={assignments}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <p>{t("common.no_data")}</p>
       )}

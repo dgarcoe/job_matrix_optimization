@@ -49,7 +49,14 @@
     "assignments": "Asignaciones de Trabajadores",
     "assign_worker": "Asignar Trabajador",
     "select_worker": "Seleccionar trabajador",
-    "select_shift": "Seleccionar turno"
+    "select_shift": "Seleccionar turno",
+    "manage_workers": "Gestionar Trabajadores",
+    "workers_assigned": "trabajadores asignados",
+    "select_all": "Seleccionar Todos",
+    "select_none": "Deseleccionar Todos",
+    "selected": "seleccionados",
+    "apply": "Aplicar",
+    "saved": "Guardado!"
   },
   "lines": {
     "title": "Lineas de Produccion",

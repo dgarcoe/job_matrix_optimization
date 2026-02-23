@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.models import Shift, ShiftAssignment, Worker
 from app.schemas import (
+    ShiftAssignmentBatch,
     ShiftAssignmentCreate,
     ShiftAssignmentOut,
     ShiftCreate,
@@ -116,4 +117,42 @@ def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     db.delete(assignment)
+    db.commit()
+
+
+@router.put("/{shift_id}/assignments/batch", status_code=204)
+def batch_assign_workers(
+    shift_id: int, data: ShiftAssignmentBatch, db: Session = Depends(get_db)
+):
+    """Set the workers assigned to a shift in one call.
+
+    Workers in the request but not yet assigned are added.
+    Workers currently assigned but absent from the request are removed.
+    Invalid worker IDs are silently skipped.
+    """
+    if not db.query(Shift).filter(Shift.id == shift_id).first():
+        raise HTTPException(status_code=404, detail="Shift not found")
+
+    existing = (
+        db.query(ShiftAssignment)
+        .filter(ShiftAssignment.shift_id == shift_id)
+        .all()
+    )
+    existing_worker_ids = {a.worker_id for a in existing}
+    desired_worker_ids = set(data.worker_ids)
+
+    # Remove workers no longer in the desired set
+    for assignment in existing:
+        if assignment.worker_id not in desired_worker_ids:
+            db.delete(assignment)
+
+    # Add workers newly in the desired set
+    valid_worker_ids = {
+        w.id
+        for w in db.query(Worker).filter(Worker.id.in_(desired_worker_ids)).all()
+    }
+    for worker_id in desired_worker_ids - existing_worker_ids:
+        if worker_id in valid_worker_ids:
+            db.add(ShiftAssignment(shift_id=shift_id, worker_id=worker_id))
+
     db.commit()
