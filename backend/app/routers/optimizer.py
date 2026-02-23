@@ -93,4 +93,8 @@ def run_optimization(
             status_code=400, detail="Invalid shift duration"
         )
 
-    return optimize_schedule(request, workers, stations, shift_duration_minutes)
+    shift_start_minutes = int(shift.start_hour * 60)
+
+    return optimize_schedule(
+        request, workers, stations, shift_duration_minutes, shift_start_minutes
+    )

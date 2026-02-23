@@ -99,6 +99,7 @@ def optimize_schedule(
     workers: list[dict],
     stations: list[dict],
     shift_duration_minutes: int,
+    shift_start_minutes: int = 0,
 ) -> OptimizationResult:
     """
     Build and solve a constraint-programming model for worker rotation.
@@ -109,6 +110,8 @@ def optimize_schedule(
         stations: List of dicts with keys: id, name, workers_needed,
                   max_minutes_per_worker, required_skill_ids.
         shift_duration_minutes: Total shift length in minutes.
+        shift_start_minutes: Shift start as minutes from midnight, used
+            to express time-slot boundaries in absolute clock time.
 
     Returns:
         OptimizationResult with the full schedule.
@@ -266,8 +269,8 @@ def optimize_schedule(
         schedule.append(
             TimeSlot(
                 slot_index=t,
-                start_minutes=t * slot_duration,
-                end_minutes=(t + 1) * slot_duration,
+                start_minutes=shift_start_minutes + t * slot_duration,
+                end_minutes=shift_start_minutes + (t + 1) * slot_duration,
                 assignments=assignments,
             )
         )
