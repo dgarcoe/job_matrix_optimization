@@ -7,6 +7,10 @@ assigns workers to stations across time slots such that:
   - Workers only get assigned to stations they have skills for.
   - No worker exceeds the maximum allowed time at any single station.
   - Workers are rotated across stations to distribute workload.
+
+When rotation_group_size > 1 the optimizer forms fixed *teams* of that
+size.  All members of a team are always assigned to the same station and
+rotate together as a unit.
 """
 
 import math
@@ -92,62 +96,34 @@ def _run_diagnostics(
                         )
                     )
 
-    # Batch rotation checks
+    # Team-model divisibility checks
     if rotation_group_size > 1:
+        if num_workers % rotation_group_size != 0:
+            diagnostics.append(
+                DiagnosticItem(
+                    level="error",
+                    message=(
+                        f"Number of workers ({num_workers}) is not a multiple "
+                        f"of rotation group size ({rotation_group_size}). "
+                        f"Cannot form complete teams."
+                    ),
+                )
+            )
+
         for s in stations:
             needed = s["workers_needed"]
-            if needed < rotation_group_size:
+            if needed % rotation_group_size != 0:
                 diagnostics.append(
                     DiagnosticItem(
-                        level="warning",
+                        level="error",
                         station_name=s["name"],
                         message=(
-                            f"Station '{s['name']}' needs {needed} worker(s) "
-                            f"but rotation group size is {rotation_group_size}. "
-                            f"No batch rotation is possible at this station; "
-                            f"workers will remain for the entire shift."
+                            f"Station '{s['name']}' needs {needed} worker(s), "
+                            f"which is not a multiple of rotation group size "
+                            f"{rotation_group_size}. Cannot assign complete teams."
                         ),
                     )
                 )
-            else:
-                if needed % rotation_group_size != 0:
-                    max_batch = (
-                        (needed // rotation_group_size) * rotation_group_size
-                    )
-                    diagnostics.append(
-                        DiagnosticItem(
-                            level="warning",
-                            station_name=s["name"],
-                            message=(
-                                f"Station '{s['name']}' needs {needed} worker(s), "
-                                f"which is not a multiple of rotation group size "
-                                f"{rotation_group_size}. At most {max_batch} "
-                                f"workers can rotate at once."
-                            ),
-                        )
-                    )
-
-                # Check reachable destinations (destination-grouping).
-                blocked = [
-                    other["name"]
-                    for other in stations
-                    if other is not s
-                    and min(needed, other["workers_needed"])
-                    < rotation_group_size
-                ]
-                if blocked:
-                    diagnostics.append(
-                        DiagnosticItem(
-                            level="warning",
-                            station_name=s["name"],
-                            message=(
-                                f"Station '{s['name']}' ({needed} workers) "
-                                f"cannot exchange workers with "
-                                f"{', '.join(blocked)} because a full group "
-                                f"of {rotation_group_size} would not fit."
-                            ),
-                        )
-                    )
 
     return diagnostics
 
@@ -189,12 +165,6 @@ def optimize_schedule(
         )
 
     # Pre-compute eligibility: can worker w work at station s?
-    worker_ids = [w["id"] for w in workers]
-    station_ids = [s["id"] for s in stations]
-
-    worker_idx = {wid: i for i, wid in enumerate(worker_ids)}
-    station_idx = {sid: i for i, sid in enumerate(station_ids)}
-
     num_workers = len(workers)
     num_stations = len(stations)
 
@@ -203,8 +173,6 @@ def optimize_schedule(
         w_skills = set(w["skill_ids"])
         for si, s in enumerate(stations):
             required = set(s["required_skill_ids"])
-            # If station requires no skills, anyone can work there.
-            # Otherwise worker must have all required skills.
             if not required or required.issubset(w_skills):
                 eligible[wi][si] = True
 
@@ -213,21 +181,71 @@ def optimize_schedule(
     for si, s in enumerate(stations):
         max_slots_at_station[si] = s["max_minutes_per_worker"] // slot_duration
 
-    # --- Build CP-SAT model ---
+    rotation_group_size = request.rotation_group_size
+
+    if rotation_group_size > 1:
+        result = _solve_team_model(
+            request,
+            workers,
+            stations,
+            eligible,
+            max_slots_at_station,
+            num_workers,
+            num_stations,
+            num_slots,
+            slot_duration,
+            shift_start_minutes,
+            rotation_group_size,
+        )
+    else:
+        result = _solve_individual_model(
+            request,
+            workers,
+            stations,
+            eligible,
+            max_slots_at_station,
+            num_workers,
+            num_stations,
+            num_slots,
+            slot_duration,
+            shift_start_minutes,
+        )
+
+    return result
+
+
+# ------------------------------------------------------------------
+# Individual model (rotation_group_size == 1)
+# ------------------------------------------------------------------
+
+
+def _solve_individual_model(
+    request,
+    workers,
+    stations,
+    eligible,
+    max_slots_at_station,
+    num_workers,
+    num_stations,
+    num_slots,
+    slot_duration,
+    shift_start_minutes,
+):
     model = cp_model.CpModel()
 
-    # Decision variables: x[w][s][t] = 1 if worker w is at station s in slot t
+    # Decision variables: x[w, s, t] = 1 if worker w at station s in slot t
     x = {}
     for wi in range(num_workers):
         for si in range(num_stations):
             for t in range(num_slots):
                 if eligible[wi][si]:
-                    x[(wi, si, t)] = model.new_bool_var(f"x_w{wi}_s{si}_t{t}")
+                    x[(wi, si, t)] = model.new_bool_var(
+                        f"x_w{wi}_s{si}_t{t}"
+                    )
                 else:
-                    # Worker cannot be assigned here
                     x[(wi, si, t)] = model.new_constant(0)
 
-    # Constraint 1: Each station must have exactly workers_needed per slot
+    # C1: Station coverage
     for si, s in enumerate(stations):
         for t in range(num_slots):
             model.add(
@@ -235,14 +253,14 @@ def optimize_schedule(
                 == s["workers_needed"]
             )
 
-    # Constraint 2: Each worker is at most at one station per slot
+    # C2: Each worker at most one station per slot
     for wi in range(num_workers):
         for t in range(num_slots):
             model.add(
                 sum(x[(wi, si, t)] for si in range(num_stations)) <= 1
             )
 
-    # Constraint 3: No worker exceeds max time at any single station
+    # C3: Max time per worker at any station
     for wi in range(num_workers):
         for si in range(num_stations):
             max_s = max_slots_at_station[si]
@@ -251,142 +269,24 @@ def optimize_schedule(
                     sum(x[(wi, si, t)] for t in range(num_slots)) <= max_s
                 )
 
-    # Constraint 4: Batch worker rotation (destination-grouped)
-    # Workers leaving a station must travel together to the SAME
-    # destination in groups of rotation_group_size.  Two sub-constraints:
-    #   4a) Turnover at each station is 0 or a multiple of group_size.
-    #   4b) The flow between each ordered pair of distinct stations
-    #       is 0 or a multiple of group_size.
-    rotation_group_size = request.rotation_group_size
-    if rotation_group_size > 1 and num_slots > 1:
-        for si_from, s_from in enumerate(stations):
-            needed_from = s_from["workers_needed"]
-
-            if needed_from < rotation_group_size:
-                # Cannot form even one full batch at this station.
-                # Force every eligible worker to stay put.
-                for t in range(num_slots - 1):
-                    for wi in range(num_workers):
-                        if eligible[wi][si_from]:
-                            model.add(
-                                x[(wi, si_from, t)]
-                                == x[(wi, si_from, t + 1)]
-                            )
-                continue
-
-            for t in range(num_slots - 1):
-                # 4a) Turnover constraint — the number of workers who
-                # leave si_from between slot t and t+1 must be 0 or a
-                # multiple of rotation_group_size.
-                stay_vars = []
-                for wi in range(num_workers):
-                    if eligible[wi][si_from]:
-                        s = model.new_bool_var(
-                            f"stay_w{wi}_s{si_from}_t{t}"
-                        )
-                        model.add(s <= x[(wi, si_from, t)])
-                        model.add(s <= x[(wi, si_from, t + 1)])
-                        model.add(
-                            s >= x[(wi, si_from, t)]
-                            + x[(wi, si_from, t + 1)]
-                            - 1
-                        )
-                        stay_vars.append(s)
-
-                max_k_turn = needed_from // rotation_group_size
-                k_turn = model.new_int_var(
-                    0, max_k_turn, f"k_turn_s{si_from}_t{t}"
-                )
-                model.add(
-                    sum(stay_vars)
-                    == needed_from - rotation_group_size * k_turn
-                )
-
-                # 4b) Destination-grouping — for every other station,
-                # the number of workers moving from si_from to si_to
-                # must be 0 or a multiple of rotation_group_size.
-                for si_to in range(num_stations):
-                    if si_to == si_from:
-                        continue
-
-                    needed_to = stations[si_to]["workers_needed"]
-                    max_flow = min(needed_from, needed_to)
-                    max_k_flow = max_flow // rotation_group_size
-
-                    if max_k_flow == 0:
-                        # Destination too small to receive a full batch.
-                        # No worker may move directly from si_from to
-                        # si_to.
-                        for wi in range(num_workers):
-                            if (
-                                eligible[wi][si_from]
-                                and eligible[wi][si_to]
-                            ):
-                                model.add(
-                                    x[(wi, si_from, t)]
-                                    + x[(wi, si_to, t + 1)]
-                                    <= 1
-                                )
-                        continue
-
-                    move_vars = []
-                    for wi in range(num_workers):
-                        if (
-                            eligible[wi][si_from]
-                            and eligible[wi][si_to]
-                        ):
-                            m = model.new_bool_var(
-                                f"mv_w{wi}_s{si_from}_d{si_to}_t{t}"
-                            )
-                            model.add(m <= x[(wi, si_from, t)])
-                            model.add(m <= x[(wi, si_to, t + 1)])
-                            model.add(
-                                m >= x[(wi, si_from, t)]
-                                + x[(wi, si_to, t + 1)]
-                                - 1
-                            )
-                            move_vars.append(m)
-
-                    if move_vars:
-                        k_flow = model.new_int_var(
-                            0,
-                            max_k_flow,
-                            f"k_flow_s{si_from}_d{si_to}_t{t}",
-                        )
-                        model.add(
-                            sum(move_vars)
-                            == rotation_group_size * k_flow
-                        )
-
-    # Objective: Maximize rotation diversity.
-    # We want to spread workers across stations. Minimize the max slots
-    # any single worker spends at a single station by using an auxiliary
-    # variable approach, but for simplicity we maximize total assignments
-    # (since constraints already enforce staffing) and add a secondary
-    # objective to favor balanced distribution.
-    #
-    # Approach: minimize the total squared concentration. Since CP-SAT
-    # doesn't support quadratic directly, we minimize the sum of
-    # per-worker-per-station assignment counts, weighted to favor balance.
-    # Specifically: maximize the number of distinct (worker, station) pairs
-    # that have at least one assignment (this promotes rotation).
-
-    # Indicator: y[w][s] = 1 if worker w is ever assigned to station s
+    # Objective: maximize distinct (worker, station) pairs
     y = {}
     for wi in range(num_workers):
         for si in range(num_stations):
             if eligible[wi][si]:
                 y[(wi, si)] = model.new_bool_var(f"y_w{wi}_s{si}")
-                # Link y to x: y=1 iff sum_t x[w][s][t] >= 1
                 total = sum(x[(wi, si, t)] for t in range(num_slots))
                 model.add(total >= 1).only_enforce_if(y[(wi, si)])
                 model.add(total == 0).only_enforce_if(y[(wi, si)].negated())
             else:
                 y[(wi, si)] = model.new_constant(0)
 
-    # Maximize distinct assignments (promotes rotation)
     model.maximize(
-        sum(y[(wi, si)] for wi in range(num_workers) for si in range(num_stations))
+        sum(
+            y[(wi, si)]
+            for wi in range(num_workers)
+            for si in range(num_stations)
+        )
     )
 
     # Solve
@@ -396,7 +296,7 @@ def optimize_schedule(
 
     if status == cp_model.INFEASIBLE:
         diagnostics = _run_diagnostics(
-            workers, stations, slot_duration, num_slots, request.rotation_group_size
+            workers, stations, slot_duration, num_slots
         )
         return OptimizationResult(
             production_line_id=request.production_line_id,
@@ -425,6 +325,232 @@ def optimize_schedule(
                 if solver.value(x[(wi, si, t)]) == 1:
                     assigned_workers.append(w["id"])
                     assigned_names.append(w["name"])
+            assignments.append(
+                StationAssignment(
+                    station_id=s["id"],
+                    station_name=s["name"],
+                    worker_ids=assigned_workers,
+                    worker_names=assigned_names,
+                )
+            )
+        schedule.append(
+            TimeSlot(
+                slot_index=t,
+                start_minutes=shift_start_minutes + t * slot_duration,
+                end_minutes=shift_start_minutes + (t + 1) * slot_duration,
+                assignments=assignments,
+            )
+        )
+
+    return OptimizationResult(
+        production_line_id=request.production_line_id,
+        shift_id=request.shift_id,
+        slot_duration_minutes=slot_duration,
+        total_slots=num_slots,
+        schedule=schedule,
+        status=status_name,
+        message=f"Schedule generated with {num_slots} time slots.",
+    )
+
+
+# ------------------------------------------------------------------
+# Team-based model (rotation_group_size > 1)
+# ------------------------------------------------------------------
+
+
+def _solve_team_model(
+    request,
+    workers,
+    stations,
+    eligible,
+    max_slots_at_station,
+    num_workers,
+    num_stations,
+    num_slots,
+    slot_duration,
+    shift_start_minutes,
+    rotation_group_size,
+):
+    # Pre-checks: divisibility
+    if num_workers % rotation_group_size != 0:
+        diagnostics = _run_diagnostics(
+            workers, stations, slot_duration, num_slots, rotation_group_size
+        )
+        return OptimizationResult(
+            production_line_id=request.production_line_id,
+            shift_id=request.shift_id,
+            slot_duration_minutes=slot_duration,
+            total_slots=num_slots,
+            schedule=[],
+            diagnostics=diagnostics,
+            status="infeasible",
+            message=(
+                f"Cannot form teams: {num_workers} workers is not "
+                f"a multiple of group size {rotation_group_size}."
+            ),
+        )
+
+    for s in stations:
+        if s["workers_needed"] % rotation_group_size != 0:
+            diagnostics = _run_diagnostics(
+                workers, stations, slot_duration, num_slots,
+                rotation_group_size,
+            )
+            return OptimizationResult(
+                production_line_id=request.production_line_id,
+                shift_id=request.shift_id,
+                slot_duration_minutes=slot_duration,
+                total_slots=num_slots,
+                schedule=[],
+                diagnostics=diagnostics,
+                status="infeasible",
+                message=(
+                    f"Station '{s['name']}' needs {s['workers_needed']} "
+                    f"worker(s), not a multiple of group size "
+                    f"{rotation_group_size}."
+                ),
+            )
+
+    num_teams = num_workers // rotation_group_size
+    teams_needed = {
+        si: s["workers_needed"] // rotation_group_size
+        for si, s in enumerate(stations)
+    }
+
+    model = cp_model.CpModel()
+
+    # --- Variables ---
+
+    # team[wi, g] = 1 iff worker wi belongs to team g
+    team = {}
+    for wi in range(num_workers):
+        for g in range(num_teams):
+            team[(wi, g)] = model.new_bool_var(f"tm_w{wi}_g{g}")
+
+    # gs[g, si, t] = 1 iff team g is at station si in slot t
+    gs = {}
+    for g in range(num_teams):
+        for si in range(num_stations):
+            for t in range(num_slots):
+                gs[(g, si, t)] = model.new_bool_var(f"gs_g{g}_s{si}_t{t}")
+
+    # --- Constraints ---
+
+    # C1: Each worker in exactly one team
+    for wi in range(num_workers):
+        model.add(sum(team[(wi, g)] for g in range(num_teams)) == 1)
+
+    # C2: Each team has exactly rotation_group_size members
+    for g in range(num_teams):
+        model.add(
+            sum(team[(wi, g)] for wi in range(num_workers))
+            == rotation_group_size
+        )
+
+    # C3: Each team at most one station per slot
+    for g in range(num_teams):
+        for t in range(num_slots):
+            model.add(
+                sum(gs[(g, si, t)] for si in range(num_stations)) <= 1
+            )
+
+    # C4: Station coverage (each station needs the right number of teams)
+    for si in range(num_stations):
+        for t in range(num_slots):
+            model.add(
+                sum(gs[(g, si, t)] for g in range(num_teams))
+                == teams_needed[si]
+            )
+
+    # C5: Team eligibility — if any member is ineligible at a station,
+    #     the team cannot be assigned there.
+    for wi in range(num_workers):
+        for si in range(num_stations):
+            if not eligible[wi][si]:
+                for g in range(num_teams):
+                    model.add(
+                        sum(gs[(g, si, t)] for t in range(num_slots)) == 0
+                    ).only_enforce_if(team[(wi, g)])
+
+    # C6: Max time per team at any single station
+    for g in range(num_teams):
+        for si in range(num_stations):
+            max_s = max_slots_at_station[si]
+            if max_s < num_slots:
+                model.add(
+                    sum(gs[(g, si, t)] for t in range(num_slots)) <= max_s
+                )
+
+    # Symmetry breaking: restrict which teams early-indexed workers
+    # can join.  Worker wi (for wi < num_teams) can only be in
+    # teams 0 … wi, which anchors team numbering and avoids
+    # equivalent relabellings.
+    for wi in range(min(num_teams, num_workers)):
+        for g in range(wi + 1, num_teams):
+            model.add(team[(wi, g)] == 0)
+
+    # --- Objective: maximize distinct (team, station) pairs ---
+    y = {}
+    for g in range(num_teams):
+        for si in range(num_stations):
+            y[(g, si)] = model.new_bool_var(f"y_g{g}_s{si}")
+            total = sum(gs[(g, si, t)] for t in range(num_slots))
+            model.add(total >= 1).only_enforce_if(y[(g, si)])
+            model.add(total == 0).only_enforce_if(y[(g, si)].negated())
+
+    model.maximize(
+        sum(
+            y[(g, si)]
+            for g in range(num_teams)
+            for si in range(num_stations)
+        )
+    )
+
+    # --- Solve ---
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 30.0
+    status = solver.solve(model)
+
+    if status == cp_model.INFEASIBLE:
+        diagnostics = _run_diagnostics(
+            workers, stations, slot_duration, num_slots, rotation_group_size
+        )
+        return OptimizationResult(
+            production_line_id=request.production_line_id,
+            shift_id=request.shift_id,
+            slot_duration_minutes=slot_duration,
+            total_slots=num_slots,
+            schedule=[],
+            diagnostics=diagnostics,
+            status="infeasible",
+            message=(
+                "No feasible schedule found. Check that you have enough "
+                "skilled workers for all stations."
+            ),
+        )
+
+    status_name = "optimal" if status == cp_model.OPTIMAL else "feasible"
+
+    # --- Extract schedule ---
+
+    # Build team membership map
+    team_members: dict[int, list[int]] = {g: [] for g in range(num_teams)}
+    for g in range(num_teams):
+        for wi in range(num_workers):
+            if solver.value(team[(wi, g)]) == 1:
+                team_members[g].append(wi)
+
+    schedule: list[TimeSlot] = []
+    for t in range(num_slots):
+        assignments: list[StationAssignment] = []
+        for si, s in enumerate(stations):
+            assigned_workers: list[int] = []
+            assigned_names: list[str] = []
+            for g in range(num_teams):
+                if solver.value(gs[(g, si, t)]) == 1:
+                    for wi in team_members[g]:
+                        assigned_workers.append(workers[wi]["id"])
+                        assigned_names.append(workers[wi]["name"])
             assignments.append(
                 StationAssignment(
                     station_id=s["id"],
