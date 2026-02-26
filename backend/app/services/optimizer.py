@@ -109,20 +109,45 @@ def _run_diagnostics(
                         ),
                     )
                 )
-            elif needed % rotation_group_size != 0:
-                max_batch = (needed // rotation_group_size) * rotation_group_size
-                diagnostics.append(
-                    DiagnosticItem(
-                        level="warning",
-                        station_name=s["name"],
-                        message=(
-                            f"Station '{s['name']}' needs {needed} worker(s), "
-                            f"which is not a multiple of rotation group size "
-                            f"{rotation_group_size}. At most {max_batch} workers "
-                            f"can rotate at once."
-                        ),
+            else:
+                if needed % rotation_group_size != 0:
+                    max_batch = (
+                        (needed // rotation_group_size) * rotation_group_size
                     )
-                )
+                    diagnostics.append(
+                        DiagnosticItem(
+                            level="warning",
+                            station_name=s["name"],
+                            message=(
+                                f"Station '{s['name']}' needs {needed} worker(s), "
+                                f"which is not a multiple of rotation group size "
+                                f"{rotation_group_size}. At most {max_batch} "
+                                f"workers can rotate at once."
+                            ),
+                        )
+                    )
+
+                # Check reachable destinations (destination-grouping).
+                blocked = [
+                    other["name"]
+                    for other in stations
+                    if other is not s
+                    and min(needed, other["workers_needed"])
+                    < rotation_group_size
+                ]
+                if blocked:
+                    diagnostics.append(
+                        DiagnosticItem(
+                            level="warning",
+                            station_name=s["name"],
+                            message=(
+                                f"Station '{s['name']}' ({needed} workers) "
+                                f"cannot exchange workers with "
+                                f"{', '.join(blocked)} because a full group "
+                                f"of {rotation_group_size} would not fit."
+                            ),
+                        )
+                    )
 
     return diagnostics
 
@@ -226,47 +251,112 @@ def optimize_schedule(
                     sum(x[(wi, si, t)] for t in range(num_slots)) <= max_s
                 )
 
-    # Constraint 4: Batch worker rotation
-    # When rotation_group_size > 1, the number of workers who leave (or join)
-    # a station between consecutive slots must be a multiple of that size.
+    # Constraint 4: Batch worker rotation (destination-grouped)
+    # Workers leaving a station must travel together to the SAME
+    # destination in groups of rotation_group_size.  Two sub-constraints:
+    #   4a) Turnover at each station is 0 or a multiple of group_size.
+    #   4b) The flow between each ordered pair of distinct stations
+    #       is 0 or a multiple of group_size.
     rotation_group_size = request.rotation_group_size
     if rotation_group_size > 1 and num_slots > 1:
-        for si, s in enumerate(stations):
-            needed = s["workers_needed"]
-            max_k = needed // rotation_group_size
-            if max_k == 0:
-                # Cannot form even one full batch at this station.
-                # Force every eligible worker to stay put across transitions.
-                for t in range(num_slots - 1):
-                    for wi in range(num_workers):
-                        if eligible[wi][si]:
-                            model.add(x[(wi, si, t)] == x[(wi, si, t + 1)])
-            else:
-                for t in range(num_slots - 1):
-                    # both[w][s][t] = 1 iff worker w is at station s in
-                    # BOTH slot t and slot t+1 (i.e. the worker stays).
-                    both_vars = []
-                    for wi in range(num_workers):
-                        if eligible[wi][si]:
-                            b = model.new_bool_var(
-                                f"both_w{wi}_s{si}_t{t}"
-                            )
-                            model.add(b <= x[(wi, si, t)])
-                            model.add(b <= x[(wi, si, t + 1)])
-                            model.add(
-                                b >= x[(wi, si, t)] + x[(wi, si, t + 1)] - 1
-                            )
-                            both_vars.append(b)
-                        # Ineligible workers always contribute 0 (no var needed)
+        for si_from, s_from in enumerate(stations):
+            needed_from = s_from["workers_needed"]
 
-                    # staying = sum(both_vars)
-                    # turnover = needed - staying must be divisible by
-                    # rotation_group_size.  Rewrite as:
-                    #   staying == needed - rotation_group_size * k
-                    k = model.new_int_var(0, max_k, f"k_s{si}_t{t}")
-                    model.add(
-                        sum(both_vars) == needed - rotation_group_size * k
-                    )
+            if needed_from < rotation_group_size:
+                # Cannot form even one full batch at this station.
+                # Force every eligible worker to stay put.
+                for t in range(num_slots - 1):
+                    for wi in range(num_workers):
+                        if eligible[wi][si_from]:
+                            model.add(
+                                x[(wi, si_from, t)]
+                                == x[(wi, si_from, t + 1)]
+                            )
+                continue
+
+            for t in range(num_slots - 1):
+                # 4a) Turnover constraint — the number of workers who
+                # leave si_from between slot t and t+1 must be 0 or a
+                # multiple of rotation_group_size.
+                stay_vars = []
+                for wi in range(num_workers):
+                    if eligible[wi][si_from]:
+                        s = model.new_bool_var(
+                            f"stay_w{wi}_s{si_from}_t{t}"
+                        )
+                        model.add(s <= x[(wi, si_from, t)])
+                        model.add(s <= x[(wi, si_from, t + 1)])
+                        model.add(
+                            s >= x[(wi, si_from, t)]
+                            + x[(wi, si_from, t + 1)]
+                            - 1
+                        )
+                        stay_vars.append(s)
+
+                max_k_turn = needed_from // rotation_group_size
+                k_turn = model.new_int_var(
+                    0, max_k_turn, f"k_turn_s{si_from}_t{t}"
+                )
+                model.add(
+                    sum(stay_vars)
+                    == needed_from - rotation_group_size * k_turn
+                )
+
+                # 4b) Destination-grouping — for every other station,
+                # the number of workers moving from si_from to si_to
+                # must be 0 or a multiple of rotation_group_size.
+                for si_to in range(num_stations):
+                    if si_to == si_from:
+                        continue
+
+                    needed_to = stations[si_to]["workers_needed"]
+                    max_flow = min(needed_from, needed_to)
+                    max_k_flow = max_flow // rotation_group_size
+
+                    if max_k_flow == 0:
+                        # Destination too small to receive a full batch.
+                        # No worker may move directly from si_from to
+                        # si_to.
+                        for wi in range(num_workers):
+                            if (
+                                eligible[wi][si_from]
+                                and eligible[wi][si_to]
+                            ):
+                                model.add(
+                                    x[(wi, si_from, t)]
+                                    + x[(wi, si_to, t + 1)]
+                                    <= 1
+                                )
+                        continue
+
+                    move_vars = []
+                    for wi in range(num_workers):
+                        if (
+                            eligible[wi][si_from]
+                            and eligible[wi][si_to]
+                        ):
+                            m = model.new_bool_var(
+                                f"mv_w{wi}_s{si_from}_d{si_to}_t{t}"
+                            )
+                            model.add(m <= x[(wi, si_from, t)])
+                            model.add(m <= x[(wi, si_to, t + 1)])
+                            model.add(
+                                m >= x[(wi, si_from, t)]
+                                + x[(wi, si_to, t + 1)]
+                                - 1
+                            )
+                            move_vars.append(m)
+
+                    if move_vars:
+                        k_flow = model.new_int_var(
+                            0,
+                            max_k_flow,
+                            f"k_flow_s{si_from}_d{si_to}_t{t}",
+                        )
+                        model.add(
+                            sum(move_vars)
+                            == rotation_group_size * k_flow
+                        )
 
     # Objective: Maximize rotation diversity.
     # We want to spread workers across stations. Minimize the max slots
