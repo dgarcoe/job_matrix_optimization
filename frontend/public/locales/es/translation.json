@@ -98,6 +98,7 @@
     "no_schedule": "No se ha generado horario aun. Configure su linea y ejecute el optimizador.",
     "diagnostics_title": "Diagnostico - Por que fallo el horario",
     "gantt_title": "Linea de Tiempo por Trabajador",
+    "rotation_group_size": "Tamaño del Grupo de Rotación",
     "minutes": "min"
   }
 }

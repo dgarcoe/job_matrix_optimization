@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # --- Skills ---
@@ -160,6 +160,14 @@ class OptimizationRequest(BaseModel):
     production_line_id: int
     shift_id: int
     slot_duration_minutes: int = 30  # Length of each rotation slot
+    rotation_group_size: int = Field(
+        default=1,
+        ge=1,
+        description=(
+            "Workers rotate between stations in batches of this size. "
+            "Default 1 = individual rotation (current behaviour)."
+        ),
+    )
 
 
 class StationAssignment(BaseModel):

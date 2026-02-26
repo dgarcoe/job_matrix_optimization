@@ -21,6 +21,7 @@ export default function Optimize() {
   const [lineId, setLineId] = useState<number | "">("");
   const [shiftId, setShiftId] = useState<number | "">("");
   const [slotDuration, setSlotDuration] = useState(30);
+  const [rotationGroupSize, setRotationGroupSize] = useState(1);
   const [result, setResult] = useState<OptimizationResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ export default function Optimize() {
       production_line_id: number;
       shift_id: number;
       slot_duration_minutes: number;
+      rotation_group_size: number;
     }) => api.post("/api/optimize", data),
     onSuccess: (response) => {
       setResult(response.data);
@@ -57,6 +59,7 @@ export default function Optimize() {
       production_line_id: lineId as number,
       shift_id: shiftId as number,
       slot_duration_minutes: slotDuration,
+      rotation_group_size: rotationGroupSize,
     });
   };
 
@@ -115,6 +118,17 @@ export default function Optimize() {
             step={5}
             value={slotDuration}
             onChange={(e) => setSlotDuration(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          {t("optimize.rotation_group_size")}
+          <input
+            type="number"
+            min={1}
+            max={50}
+            step={1}
+            value={rotationGroupSize}
+            onChange={(e) => setRotationGroupSize(Number(e.target.value))}
           />
         </label>
         <button type="submit" disabled={optimizeMutation.isPending}>

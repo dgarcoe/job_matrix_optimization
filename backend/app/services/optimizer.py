@@ -27,6 +27,7 @@ def _run_diagnostics(
     stations: list[dict],
     slot_duration: int,
     num_slots: int,
+    rotation_group_size: int = 1,
 ) -> list[DiagnosticItem]:
     """Check for common causes of infeasibility and return diagnostic items."""
     diagnostics: list[DiagnosticItem] = []
@@ -90,6 +91,38 @@ def _run_diagnostics(
                             ),
                         )
                     )
+
+    # Batch rotation checks
+    if rotation_group_size > 1:
+        for s in stations:
+            needed = s["workers_needed"]
+            if needed < rotation_group_size:
+                diagnostics.append(
+                    DiagnosticItem(
+                        level="warning",
+                        station_name=s["name"],
+                        message=(
+                            f"Station '{s['name']}' needs {needed} worker(s) "
+                            f"but rotation group size is {rotation_group_size}. "
+                            f"No batch rotation is possible at this station; "
+                            f"workers will remain for the entire shift."
+                        ),
+                    )
+                )
+            elif needed % rotation_group_size != 0:
+                max_batch = (needed // rotation_group_size) * rotation_group_size
+                diagnostics.append(
+                    DiagnosticItem(
+                        level="warning",
+                        station_name=s["name"],
+                        message=(
+                            f"Station '{s['name']}' needs {needed} worker(s), "
+                            f"which is not a multiple of rotation group size "
+                            f"{rotation_group_size}. At most {max_batch} workers "
+                            f"can rotate at once."
+                        ),
+                    )
+                )
 
     return diagnostics
 
@@ -193,6 +226,48 @@ def optimize_schedule(
                     sum(x[(wi, si, t)] for t in range(num_slots)) <= max_s
                 )
 
+    # Constraint 4: Batch worker rotation
+    # When rotation_group_size > 1, the number of workers who leave (or join)
+    # a station between consecutive slots must be a multiple of that size.
+    rotation_group_size = request.rotation_group_size
+    if rotation_group_size > 1 and num_slots > 1:
+        for si, s in enumerate(stations):
+            needed = s["workers_needed"]
+            max_k = needed // rotation_group_size
+            if max_k == 0:
+                # Cannot form even one full batch at this station.
+                # Force every eligible worker to stay put across transitions.
+                for t in range(num_slots - 1):
+                    for wi in range(num_workers):
+                        if eligible[wi][si]:
+                            model.add(x[(wi, si, t)] == x[(wi, si, t + 1)])
+            else:
+                for t in range(num_slots - 1):
+                    # both[w][s][t] = 1 iff worker w is at station s in
+                    # BOTH slot t and slot t+1 (i.e. the worker stays).
+                    both_vars = []
+                    for wi in range(num_workers):
+                        if eligible[wi][si]:
+                            b = model.new_bool_var(
+                                f"both_w{wi}_s{si}_t{t}"
+                            )
+                            model.add(b <= x[(wi, si, t)])
+                            model.add(b <= x[(wi, si, t + 1)])
+                            model.add(
+                                b >= x[(wi, si, t)] + x[(wi, si, t + 1)] - 1
+                            )
+                            both_vars.append(b)
+                        # Ineligible workers always contribute 0 (no var needed)
+
+                    # staying = sum(both_vars)
+                    # turnover = needed - staying must be divisible by
+                    # rotation_group_size.  Rewrite as:
+                    #   staying == needed - rotation_group_size * k
+                    k = model.new_int_var(0, max_k, f"k_s{si}_t{t}")
+                    model.add(
+                        sum(both_vars) == needed - rotation_group_size * k
+                    )
+
     # Objective: Maximize rotation diversity.
     # We want to spread workers across stations. Minimize the max slots
     # any single worker spends at a single station by using an auxiliary
@@ -230,7 +305,9 @@ def optimize_schedule(
     status = solver.solve(model)
 
     if status == cp_model.INFEASIBLE:
-        diagnostics = _run_diagnostics(workers, stations, slot_duration, num_slots)
+        diagnostics = _run_diagnostics(
+            workers, stations, slot_duration, num_slots, request.rotation_group_size
+        )
         return OptimizationResult(
             production_line_id=request.production_line_id,
             shift_id=request.shift_id,

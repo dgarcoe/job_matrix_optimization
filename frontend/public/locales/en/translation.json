@@ -98,6 +98,7 @@
     "no_schedule": "No schedule generated yet. Configure your line and run the optimizer.",
     "diagnostics_title": "Diagnostics - Why the schedule failed",
     "gantt_title": "Worker Timeline",
+    "rotation_group_size": "Rotation Group Size",
     "minutes": "min"
   }
 }
